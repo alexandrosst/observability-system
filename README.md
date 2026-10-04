@@ -21,7 +21,7 @@ doc. Status: draft v0, schema and a library prototype only (no agent yet).
 
 ```bash
 pip install -r requirements.txt
-export NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASSWORD=...
+cp .env.example .env        # then set NEO4J_PASSWORD (the same one as in k8s/neo4j/neo4j-auth.env)
 python scripts/apply_schema.py
 python scripts/seed_capabilities.py
 python prototype/proto_memory.py
