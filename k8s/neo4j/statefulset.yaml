@@ -17,6 +17,10 @@ spec:
       labels:
         app.kubernetes.io/name: neo4j
     spec:
+      # REQUIRED: the official image turns every NEO4J_* environment variable into a Neo4j
+      # setting. Kubernetes injects NEO4J_PORT, NEO4J_SERVICE_HOST, ... for a Service named
+      # "neo4j", which Neo4j rejects as unknown settings and exits. Disable service links.
+      enableServiceLinks: false
       # Single-node cluster: no nodeSelector needed. On a multi-node cluster, pin the
       # database to a node the mutation experiments never touch, for example:
       #   nodeSelector:

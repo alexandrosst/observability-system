@@ -43,3 +43,7 @@ In-cluster clients use `bolt://neo4j.observability-memory.svc.cluster.local:7687
   requests 2Gi), (b) the data lives on that one node's disk, so keep an off-node copy of any
   dataset you cite, and (c) when injecting link latency with `tc netem`, filter by destination or
   apply it on the data-plane side, so Neo4j's own traffic is not delayed.
+* Troubleshooting: if the pod restarts in a loop, read why with
+  `kubectl -n observability-memory logs neo4j-0 --previous`. `Unrecognized setting` lines mean a
+  stray `NEO4J_*` environment variable (see `enableServiceLinks: false` in the StatefulSet).
+  `OOMKilled` in `kubectl describe pod` means the memory limit is too low.
