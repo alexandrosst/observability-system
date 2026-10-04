@@ -21,6 +21,8 @@ PARAMETERS = {
     "max_pod_count":     ("count", 1, 10),
 }
 
+ENUM_LOG_LEVELS = ["INFO", "DEBUG"]  # values used by v1 tuning levels
+
 # qualitative priors: (parameter, dimension, direction) where direction is the
 # sign of the dimension change when the parameter value INCREASES
 PRIORS = [
@@ -47,6 +49,7 @@ def main():
         for name, (unit, lo, hi) in PARAMETERS.items():
             s.run("MERGE (p:Parameter {id:$id}) SET p.name=$n, p.unit=$u, p.min=$lo, p.max=$hi",
                   id=f"parameter:{name}", n=name, u=unit, lo=lo, hi=hi)
+        s.run("MATCH (p:Parameter {id:'parameter:log_level'}) SET p.allowed = $a", a=ENUM_LOG_LEVELS)
         for p, d, direction in PRIORS:
             s.run("""MATCH (p:Parameter {id:$p}), (d:ResourceDimension {id:$d})
                      MERGE (p)-[a:AFFECTS]->(d) SET a.direction=$dir, a.source='prior'""",
