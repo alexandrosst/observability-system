@@ -79,7 +79,8 @@ MERGE (l)-[:FORWARDS_TO]->(c);
 MATCH (l:Operator {role: "local"}), (c:Operator {id: "operator:central"})
 MERGE (df:Dataflow:Entity {id: "dataflow:" + l.name + "->central:telemetry"})
   SET df.name = l.name + " to central (telemetry)", df.signal = "telemetry",
-      df.freshness_slo = 30.0, df.drop_ratio_slo = 0.02, df.type = "OBJECT"
+      df.freshness_slo = 30.0, df.drop_ratio_slo = 0.02,
+      df.nominal_freshness_slo = 30.0, df.nominal_drop_ratio_slo = 0.02, df.type = "OBJECT"
 MERGE (df)-[:FROM]->(l)
 MERGE (df)-[:TO]->(c);
 
