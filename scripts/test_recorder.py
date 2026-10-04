@@ -15,7 +15,7 @@ print("verdict logic OK")
 r = Recorder()
 r._run("MERGE (g:Goal {id:'goal:test'}) SET g.name='keep freshness'")
 DF = r._run("MATCH (d:Dataflow) RETURN d.id AS id LIMIT 1")[0]["id"]
-cl = r._run("MATCH (c:ConfigVersion) WHERE c.valid_to IS NULL RETURN c.cluster AS c LIMIT 1")[0]["c"]
+op = r._run("MATCH (o:Operator)-[:HAS_CONFIGURATION]->(c:ConfigVersion) WHERE c.valid_to IS NULL RETURN o.id AS id LIMIT 1")[0]["id"]
 
 def run(kind, actions, after, eff):
     ev = r.record_event(kind, DF, {"synthetic": True})
@@ -23,15 +23,22 @@ def run(kind, actions, after, eff):
     return r.record_outcome(pl, DF, after, {"good": .4, "drop": .1}, eff, nom, 300)
 
 print(run("link_degradation", [{"parameter": "parameter:scrape_interval_s", "from": 15, "to": 30,
-      "cluster": cl, "new_config": {"scrape_interval_s": 30, "exporters": ["kepler"]}}],
+      "operator": op, "new_config": {"scrape_interval_s": 30, "exporters": ["kepler"]}}],
       {"good": .93, "drop": .01}, nom))
 print(run("link_degradation", [{"parameter": "parameter:freshness_slo_s", "from": 30, "to": 60}],
       {"good": .96, "drop": .01}, {"freshness": 60.0, "drop": .02}))
 print(run("service_migration", [{"parameter": "parameter:log_level", "from": "info", "to": "error"}],
-      {"good": .41, "drop": .09}, nom))
+      {"good": .31, "drop": .09}, nom))  # worse than before (.4) -> degraded
 
 for row in r._run("""MATCH (e:Event)-[:TRIGGERED]->(p:Plan)-[:RESULTED_IN]->(o:Outcome)
                      WHERE e.detail CONTAINS 'synthetic'
                      RETURN e.kind AS event, o.verdict AS verdict, o.effective_freshness_slo AS slo
                      ORDER BY o.ts DESC LIMIT 3"""):
     print(row)
+
+chain = r._run("""MATCH (o:Operator {id:$op})-[:HAS_CONFIGURATION]->(c:ConfigVersion)
+                  OPTIONAL MATCH (c)-[:SUPERSEDES]->(prev)
+                  RETURN c.id AS id, c.version AS v, c.valid_to IS NULL AS current, prev.id AS supersedes
+                  ORDER BY c.version""", op=op)
+for row in chain: print(row)
+assert any(x["current"] and x["supersedes"] for x in chain), "no versioned config chain written"

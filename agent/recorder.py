@@ -58,7 +58,7 @@ class Recorder:
 
     def record_plan(self, event_id, goal_id, rationale, actions, trace_id=None, status="committed"):
         """actions: list of {'capability': id|None, 'parameter': id|None, 'from':x, 'to':y,
-                             'cluster': id, 'new_config': {...}|None}"""
+                             'operator': id, 'new_config': {...}|None}"""
         pid = f"plan:{uuid.uuid4().hex[:12]}"
         self._run(
             """CREATE (p:Plan {id:$pid, ts:$ts, rationale:$why, status:$status})
@@ -81,22 +81,29 @@ class Recorder:
                 pid=pid, aid=aid, i=i, frm=_s(a.get("from")), to=_s(a.get("to")), ts=now(),
                 cap=a.get("capability"), par=a.get("parameter"))
             if a.get("new_config") is not None:
-                self._new_config(aid, a["cluster"], a["new_config"])
+                self._new_config(aid, a["operator"], a["new_config"])
         return pid
 
-    def _new_config(self, action_id, cluster_id, cfg):
-        self._run(
+    def _new_config(self, action_id, operator_id, cfg):
+        """Close the operator's current ConfigVersion (valid_to IS NULL) and chain a new one."""
+        rows = self._run(
             """MATCH (a:Action {id:$aid})
-               MATCH (old:ConfigVersion {cluster:$cl}) WHERE old.valid_to IS NULL
-               WITH a, old ORDER BY old.version DESC LIMIT 1
-               SET old.valid_to = $ts
-               CREATE (n:ConfigVersion:Entity {id:'configversion:'+$cl+':'+toString(old.version+1),
-                       cluster:$cl, version:old.version+1, valid_from:$ts, valid_to:null,
-                       exporters:$exp, scrape_interval_s:$si, type:'OBJECT'})
+               MATCH (op:Operator {id:$op})-[:HAS_CONFIGURATION]->(old:ConfigVersion)
+               WHERE old.valid_to IS NULL
+               WITH a, op, old ORDER BY old.version DESC LIMIT 1
+               SET old.valid_to = datetime()
+               CREATE (n:ConfigVersion:Entity {id: 'configversion:' + replace(op.id,'operator:','') + ':' + toString(old.version+1),
+                       name: replace(op.id,'operator:','') + ' config v' + toString(old.version+1),
+                       version: old.version+1, valid_from: datetime(), valid_to: null,
+                       exporters: $exp, scrape_interval_s: $si, type: 'OBJECT'})
+               MERGE (op)-[:HAS_CONFIGURATION]->(n)
                MERGE (n)-[:SUPERSEDES]->(old)
-               MERGE (a)-[:PRODUCED]->(n)""",
-            aid=action_id, cl=cluster_id, ts=now(),
+               MERGE (a)-[:PRODUCED]->(n)
+               RETURN n.id AS id""",
+            aid=action_id, op=operator_id,
             exp=cfg.get("exporters", []), si=cfg.get("scrape_interval_s"))
+        if not rows:
+            raise RuntimeError(f"no current ConfigVersion for operator {operator_id}; nothing was versioned")
 
     def record_outcome(self, plan_id, dataflow_id, after, before, effective, nominal, window_s):
         v = verdict(after, before, effective, nominal)
