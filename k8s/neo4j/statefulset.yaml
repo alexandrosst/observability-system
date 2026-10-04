@@ -17,10 +17,10 @@ spec:
       labels:
         app.kubernetes.io/name: neo4j
     spec:
-      # Pin to a node the mutation experiments never touch. Label it once with:
-      #   kubectl label node <node-name> observability/role=memory
-      nodeSelector:
-        observability/role: memory
+      # Single-node cluster: no nodeSelector needed. On a multi-node cluster, pin the
+      # database to a node the mutation experiments never touch, for example:
+      #   nodeSelector:
+      #     observability/role: memory
       securityContext:
         runAsUser: 7474      # neo4j user in the official image
         runAsGroup: 7474

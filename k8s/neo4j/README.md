@@ -7,8 +7,9 @@ and kubeconform 0.6.7 (Kubernetes 1.30). Not yet applied to a real cluster.
 ## Deploy
 
 ```bash
-# 1. Label the node that will host the database (pick one the mutation experiments never touch)
-kubectl label node <node-name> observability/role=memory
+# 1. (Multi-node clusters only) pin the database to a node the mutation experiments never touch:
+#    label the node, then uncomment the nodeSelector in statefulset.yaml. A single-node
+#    cluster needs nothing here.
 
 # 2. Create the password file (git-ignored)
 cd k8s/neo4j
@@ -37,3 +38,8 @@ In-cluster clients use `bolt://neo4j.observability-memory.svc.cluster.local:7687
 * Access control is the Secret only. Add a NetworkPolicy limiting port 7687 to the agent and
   tool-server namespaces once those exist (requires a CNI that enforces policies).
 * The StatefulSet's PVC uses the cluster's default StorageClass.
+* Single-node cluster: the database shares the node with everything else on the central
+  cluster, so (a) check `kubectl describe node` for allocatable memory before applying (the pod
+  requests 2Gi), (b) the data lives on that one node's disk, so keep an off-node copy of any
+  dataset you cite, and (c) when injecting link latency with `tc netem`, filter by destination or
+  apply it on the data-plane side, so Neo4j's own traffic is not delayed.
