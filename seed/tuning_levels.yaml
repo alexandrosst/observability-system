@@ -1,0 +1,60 @@
+# Tuning level definitions for the tuning_agent.
+#
+# Each level represents a named operating mode for local Operators.
+# Levels are ordered from most energy-efficient (0) to highest priority (5).
+# All dimensions at a given level are designed to be mutually consistent:
+#   scrape_interval <= freshness_slo at every level.
+#
+# Fields:
+#   name             : human-readable level identifier (used in supervisor requests)
+#   scrape_interval  : Prometheus scrape interval (e.g. "5s", "30s")
+#   freshness_slo    : maximum acceptable data age in seconds (float)
+#   drop_ratio_slo   : maximum acceptable drop fraction, 0–1 (float)
+#   log_level        : application log granularity — INFO or DEBUG
+#   pod_multiplier   : central Operator max_pod_count = BASE_POD_COUNT * pod_multiplier
+#
+# To add or adjust a level: edit this file only.
+# config.py, tuning_tools.py, and the agent prompt all derive from this file.
+
+levels:
+  - name: minimal_monitoring
+    scrape_interval: "60s"
+    freshness_slo: 120.0
+    drop_ratio_slo: 0.10
+    log_level: INFO
+    pod_multiplier: 1
+
+  - name: energy_efficient
+    scrape_interval: "40s"
+    freshness_slo: 60.0
+    drop_ratio_slo: 0.05
+    log_level: INFO
+    pod_multiplier: 1
+
+  - name: balanced
+    scrape_interval: "30s"
+    freshness_slo: 30.0
+    drop_ratio_slo: 0.02
+    log_level: INFO
+    pod_multiplier: 2
+
+  - name: enhanced
+    scrape_interval: "20s"
+    freshness_slo: 20.0
+    drop_ratio_slo: 0.01
+    log_level: INFO
+    pod_multiplier: 2
+
+  - name: priority
+    scrape_interval: "10s"
+    freshness_slo: 10.0
+    drop_ratio_slo: 0.005
+    log_level: DEBUG
+    pod_multiplier: 3
+
+  - name: maximum_priority
+    scrape_interval: "5s"
+    freshness_slo: 5.0
+    drop_ratio_slo: 0.001
+    log_level: DEBUG
+    pod_multiplier: 4

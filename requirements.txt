@@ -1,0 +1,4 @@
+neo4j>=5.20
+neo4j-agent-memory==0.6.0
+httpx
+pyyaml

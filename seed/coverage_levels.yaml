@@ -1,0 +1,142 @@
+# Coverage level definitions for the operational_agent.
+#
+# This file is the single source of truth for:
+#   1. The exporter vocabulary (what each exporter means)
+#   2. The provisioner signal mapping (how each exporter translates to a chart parameter)
+#   3. The coverage level presets (which exporters are active at each level)
+#
+# To add a new exporter: add it to `exporters` and `signal_mapping`, then
+# reference it in whichever levels make sense.
+# To adjust a level: edit its `exporters` list only.
+# config.py, telemetry_tools.py, and the agent prompt all derive from this file.
+#
+# network_latency_* exporters: use exactly one at a time (scope is encoded in the name).
+# All three map to networkLatency=true in the provisioner; the difference is
+# which target IPs the agent resolves from the graph and passes alongside.
+
+# ── Exporter vocabulary ───────────────────────────────────────────────────────
+# Each entry defines the internal name, its human-readable description,
+# and the provisioner signal name it maps to.
+
+exporters:
+  - name: node_level_resources
+    description: "node-exporter: CPU, memory, disk at node level"
+    signal: nodeResources
+
+  - name: container_level_resources
+    description: "cAdvisor: CPU, memory at per-container level"
+    signal: containerResources
+
+  - name: kubelet_metrics
+    description: "kubelet: pod lifecycle, volume, node runtime metrics"
+    signal: kubelet
+
+  - name: energy_metrics
+    description: "kepler: energy/power consumption per node"
+    signal: energy
+
+  - name: network_latency_intra_cluster
+    description: "latency probing: Services on the same cluster"
+    signal: networkLatency
+
+  - name: network_latency_inter_cluster
+    description: "latency probing: Services across clusters of this app"
+    signal: networkLatency
+
+  - name: network_latency_full
+    description: "latency probing: services (intra+inter) + IoT/physical devices"
+    signal: networkLatency
+
+  - name: kubernetes_state
+    description: "kube-state-metrics: pod/deployment status, replica counts"
+    signal: kubernetesState
+
+  - name: kubernetes_events
+    description: "Kubernetes event stream"
+    signal: kubernetesEvents
+
+  - name: application_logs
+    description: "application logs via OTLP"
+    signal: applicationLogs
+
+  - name: application_metrics
+    description: "application metrics via OTLP"
+    signal: applicationMetrics
+
+  - name: application_traces
+    description: "distributed traces via OTLP"
+    signal: traces
+
+  - name: system_logs
+    description: "journald/containerd logs via Fluent Bit"
+    signal: systemLogs
+
+
+# ── Coverage level presets ────────────────────────────────────────────────────
+# Levels are ordered from least (0) to most (5) comprehensive.
+# Each level is a superset of the previous, except the network_latency_*
+# exporter which swaps to a wider scope as the level increases.
+
+levels:
+  - name: minimal
+    exporters:
+      - node_level_resources
+      - energy_metrics
+
+  - name: basic
+    exporters:
+      - node_level_resources
+      - container_level_resources
+      - energy_metrics
+      - application_logs
+
+  - name: standard
+    exporters:
+      - node_level_resources
+      - container_level_resources
+      - energy_metrics
+      - kubernetes_state
+      - kubernetes_events
+      - application_logs
+      - system_logs
+
+  - name: extended
+    exporters:
+      - node_level_resources
+      - container_level_resources
+      - kubelet_metrics
+      - energy_metrics
+      - kubernetes_state
+      - kubernetes_events
+      - application_logs
+      - application_metrics
+      - system_logs
+      - network_latency_intra_cluster
+
+  - name: deep
+    exporters:
+      - node_level_resources
+      - container_level_resources
+      - kubelet_metrics
+      - energy_metrics
+      - kubernetes_state
+      - kubernetes_events
+      - application_logs
+      - application_metrics
+      - application_traces
+      - system_logs
+      - network_latency_inter_cluster
+
+  - name: full
+    exporters:
+      - node_level_resources
+      - container_level_resources
+      - kubelet_metrics
+      - energy_metrics
+      - kubernetes_state
+      - kubernetes_events
+      - application_logs
+      - application_metrics
+      - application_traces
+      - system_logs
+      - network_latency_full

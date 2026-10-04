@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability-memory
+  labels:
+    app.kubernetes.io/part-of: agentic-observability-2

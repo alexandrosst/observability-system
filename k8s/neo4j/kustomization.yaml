@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability-memory
+resources:
+  - namespace.yaml
+  - statefulset.yaml
+  - service.yaml
+# The password never lives in this repo. Create neo4j-auth.env (git-ignored) from
+# neo4j-auth.env.example; kustomize turns it into the Secret `neo4j-auth`.
+secretGenerator:
+  - name: neo4j-auth
+    envs:
+      - neo4j-auth.env
+generatorOptions:
+  disableNameSuffixHash: true
