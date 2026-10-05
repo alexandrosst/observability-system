@@ -53,13 +53,42 @@ class StubProvisioner:
                   id=dataflow_id)
 
 
+class PriorExplorer:
+    """Cold-start policy (off unless passed to Agent): when retrieval has nothing usable, try one
+    bounded step on a parameter whose qualitative prior says it moves the violated dimension the
+    right way. Uses only graph content (AFFECTS priors, current values); skips untried-only
+    signatures already seen for this event kind. Its plans are tagged source='explore'."""
+    GOOD = {"worsens": -1, "improves": +1}  # direction of parameter change that helps, by prior
+
+    def __init__(self, drv, dimension="freshness", factor=2.0):
+        self.drv, self.dimension, self.factor = drv, dimension, factor
+
+    def propose(self, beliefs, tried):
+        with self.drv.session() as s:
+            priors = s.run("""MATCH (p:Parameter)-[a:AFFECTS]->(:ResourceDimension {id:$d})
+                              RETURN p.id AS id, a.direction AS dir, p.min AS lo, p.max AS hi""",
+                           d=f"dimension:{self.dimension}").data()
+        for pr in priors:
+            cur = beliefs["current"].get(pr["id"])
+            step = self.GOOD.get(pr["dir"])
+            if cur is None or step is None:
+                continue
+            new = cur * self.factor if step > 0 else cur / self.factor
+            new = int(min(max(new, pr["lo"]), pr["hi"]))
+            if new == cur or ((pr["id"], str(new)),) in tried:
+                continue
+            return [{"parameter": pr["id"], "to": new}]
+        return None
+
+
 class Agent:
-    def __init__(self, drv, recorder=None, deliberator=None, provisioner=None, goal_id="goal:keep_slos"):
+    def __init__(self, drv, recorder=None, deliberator=None, provisioner=None, goal_id="goal:keep_slos", explorer=None):
         self.drv = drv
         self.rec = recorder or Recorder(drv)
         self.deliberator = deliberator or TopScoreDeliberator()
         self.prov = provisioner or StubProvisioner(drv)
         self.goal_id = goal_id
+        self.explorer = explorer
         self.catalog = validator.load_catalog(drv)
 
     # ---- beliefs -----------------------------------------------------------------
@@ -69,7 +98,10 @@ class Agent:
                          RETURN d.freshness_slo AS fr, d.drop_ratio_slo AS dr,
                                 d.nominal_freshness_slo AS nfr, d.nominal_drop_ratio_slo AS ndr""",
                       id=dataflow_id).single()
-        return {"kind": kind, "dataflow": dataflow_id, "detail": detail,
+            c = s.run("""MATCH (d:Dataflow {id:$id})-[:FROM]->(:Operator)-[:HAS_CONFIGURATION]->(cv:ConfigVersion)
+                         WHERE cv.valid_to IS NULL RETURN cv.scrape_interval_s AS si""", id=dataflow_id).single()
+        current = {"parameter:scrape_interval_s": c["si"]} if c and c["si"] is not None else {}
+        return {"kind": kind, "dataflow": dataflow_id, "detail": detail, "current": current,
                 "effective": {"freshness": d["fr"], "drop": d["dr"]},
                 "nominal": {"freshness": d["nfr"], "drop": d["ndr"]}}
 
@@ -90,16 +122,23 @@ class Agent:
         event = self.rec.record_event(kind, dataflow_id, detail)
         opts = self.options(b)
         pick = self.deliberator.choose(b, opts)
+        source, why = "agent", None
+        if pick is None and self.explorer:
+            tried = {o["signature"] for o in retrieval.candidates(self.drv, b["kind"], b["detail"], b["dataflow"])}
+            acts = self.explorer.propose(b, tried)
+            if acts and validator.validate_plan(acts, self.catalog, b["dataflow"])["ok"]:
+                pick = {"actions": acts, "flags": [], "score": None, "support": 0}
+                source, why = "explore", f"no usable history; exploring prior-guided step {acts}"
         if pick is None:
             plan = self.rec.record_plan(event, self.goal_id, "no validated candidate above threshold; escalate",
                                         [], status="escalated", source="agent")
             return {"decision": "escalate", "plan": plan, "options": opts}
         plan = self.rec.record_plan(event, self.goal_id,
-                                    f"retrieved candidate score={pick['score']} support={pick['support']}",
-                                    pick["actions"], source="agent")
+                                    why or f"retrieved candidate score={pick['score']} support={pick['support']}",
+                                    pick["actions"], source=source)
         self.prov.apply(dataflow_id, pick["actions"])
         after = measure(pick["actions"])
         eff = self.perceive(kind, dataflow_id, detail)["effective"]  # SLO as actually in force
         verdict = self.rec.record_outcome(plan, dataflow_id, after, before, eff, b["nominal"], window_s)
-        return {"decision": "act", "plan": plan, "actions": pick["actions"], "flags": pick["flags"],
+        return {"decision": "act" if source == "agent" else "explore", "plan": plan, "actions": pick["actions"], "flags": pick["flags"],
                 "verdict": verdict, "options": opts}

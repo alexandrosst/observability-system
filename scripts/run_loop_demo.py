@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from agent.loop import Agent
+from agent.loop import Agent, PriorExplorer
 from scripts.common import driver
 
 drv = driver()
@@ -23,7 +23,9 @@ def show(title, r):
 
 try:
     show("1) link_degradation 120 ms", agent.handle("link_degradation", DF, {"delay_ms": 120}, env, BEFORE))
-    show("2) unseen event kind (cold start)", agent.handle("node_failure", DF, {}, env, BEFORE))
+    show("2) unseen event kind, no explorer (escalates)", agent.handle("node_failure", DF, {}, env, BEFORE))
+    agent.explorer = PriorExplorer(drv)
+    show("3) unseen event kind, with explorer", agent.handle("node_failure", DF, {}, env, BEFORE))
 finally:
     agent.prov.restore_nominal(DF)
     print("\nSLOs restored to nominal; demo plans are tagged source='agent'.")
