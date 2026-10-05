@@ -56,18 +56,18 @@ class Recorder:
             id=eid, kind=kind, ts=ts or now(), detail=json.dumps(detail or {}), df=dataflow_id)
         return eid
 
-    def record_plan(self, event_id, goal_id, rationale, actions, trace_id=None, status="committed"):
+    def record_plan(self, event_id, goal_id, rationale, actions, trace_id=None, status="committed", source=None):
         """actions: list of {'capability': id|None, 'parameter': id|None, 'from':x, 'to':y,
                              'operator': id, 'new_config': {...}|None}"""
         pid = f"plan:{uuid.uuid4().hex[:12]}"
         self._run(
-            """CREATE (p:Plan {id:$pid, ts:$ts, rationale:$why, status:$status})
+            """CREATE (p:Plan {id:$pid, ts:$ts, rationale:$why, status:$status, source:$source})
                WITH p MATCH (e:Event {id:$eid}) MERGE (e)-[:TRIGGERED]->(p)
                WITH p OPTIONAL MATCH (g:Goal {id:$gid})
                FOREACH (_ IN CASE WHEN g IS NULL THEN [] ELSE [1] END | MERGE (p)-[:SERVES]->(g))
                WITH p OPTIONAL MATCH (t:ReasoningTrace {id:$tid})
                FOREACH (_ IN CASE WHEN t IS NULL THEN [] ELSE [1] END | MERGE (t)-[:PRODUCED]->(p))""",
-            pid=pid, ts=now(), why=rationale, status=status, eid=event_id, gid=goal_id, tid=trace_id)
+            pid=pid, ts=now(), why=rationale, status=status, source=source, eid=event_id, gid=goal_id, tid=trace_id)
         for i, a in enumerate(actions):
             aid = f"{pid}:a{i}"
             self._run(
